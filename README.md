@@ -10,9 +10,12 @@ procedure LoadFromBlob(BField: TBlobField);
 
 procedure SaveToFile(Filename: TFilename; zip: Boolean =True);
 //  Save zMemTable (memory stream) to a file
+//       the stream are compressed using zstream if zip=True
+//       (the compressed version of the output file starts 4 bytes of 0)
 
 procedure LoadFromFile(Filename: TFilename);
-//  Load zMemTable from a File
+//  Load zMemTable from a File. This method is able to recognise both the compressed and 
+//    uncompressed file by checking the first 4 bytes of the file
 
 procedure CopyStru(src: TDataSet; xcFields: TByteSet =[];
                                                  DeleteOldfields: Boolean=True);     
