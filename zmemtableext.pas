@@ -8,8 +8,8 @@ interface
 uses  ZMemTable, ZStream, db,  ZDataset, Classes, SysUtils;
 
 Type
- // TByteSet = set of Byte;
-  TIntArray = array of Integer;
+
+//  TIntArray = TArray<Integer>;
 
   TZMemTableHelper = class helper for TZMemTable
       private
