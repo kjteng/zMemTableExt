@@ -8,7 +8,8 @@ interface
 uses  ZMemTable, ZStream, db,  ZDataset, Classes, SysUtils;
 
 Type
-  TByteSet = set of Byte;
+ // TByteSet = set of Byte;
+  TIntArray = array of Integer;
 
   TZMemTableHelper = class helper for TZMemTable
       private
@@ -18,8 +19,9 @@ Type
         procedure LoadFromFile(Filename: TFilename);
         procedure SaveToFile(Filename: TFilename; zip: Boolean =True);
         procedure SetDecPlace(ftype: TFieldType; dec: byte);
-        procedure CopyStru(src: TDataSet; xcFields: TByteSet =[];
+        procedure CopyStru(src: TDataSet; xcFields: array of Integer;
                                                  DeleteOldfields: Boolean=True);
+        procedure CopyStru(src: TDataSet;  DeleteOldFields: Boolean=True); overload;
         procedure CopyData(src: TDataSet);
         {$IFDEF USE_MY_STREAMIMG_METHOD} // these shall be superseded by the new mtd in zMemTable.pas
         procedure LoadFromStream(AStream: TStream);
@@ -56,7 +58,6 @@ begin
   uz := Tdecompressionstream.Create(ms);
   ss := TMemoryStream.Create;
   uz.Position := 0;
-
   while uz.Read(bb, 1) > 0 do
       ss.Write(bb, 1);
   uz.Free;
@@ -102,8 +103,26 @@ end;
 
 
 procedure TZMemTableHelper.LoadFromFile(Filename: TFilename);
-var ms: TMemoryStream; fs: TFileStream; ii: integer; zip: boolean;
-begin
+var ms: TMemoryStream; ii: integer; zip: boolean;
+
+begin;
+
+  Clear;
+  ms := TMemoryStream.Create;
+  try
+    ms.LoadFromfile(Filename);
+//    ms.Position := 0;
+    zip := ms.ReadByte*256+ms.ReadByte = $789C;
+    (*7801 - No Compression  789C - Default Compression  78DA - Best Compression *)
+    if zip then
+      uzStream(ms);
+    ms.Position:= 0;
+    LoadFromStream(ms) ;
+  finally;
+    ms.Free;
+  end;
+  (*
+
   Clear;
   fs := TFileStream.Create(Filename, fmOpenRead + fmShareCompat);
   fs.Read(ii, Sizeof(ii));
@@ -125,13 +144,24 @@ begin
     ms.Free;
     fs.Free;
   end;
+  *)
 end;
 
 
 procedure TZMemTableHelper.SaveToFile(Filename: TFilename; zip: Boolean =True);
-var ms: TMemoryStream; fs: TFileStream; ii: Integer;
+var ms: TMemoryStream;
 begin
-  fs := TFileStream.Create(Filename, fmCreate);
+  ms := TMemoryStream.Create;
+  try
+    ms.Position := 0;
+    SaveToStream(ms);
+    if zip then
+        zzStream(ms);
+    ms.SaveToFile(Filename)
+  finally
+    ms.Free;
+  end;
+ { fs := TFileStream.Create(Filename, fmCreate);
   ms := TMemoryStream.Create;
   try
     ms.Position := 0;
@@ -147,18 +177,25 @@ begin
   finally
     ms.Free;
     fs.Free;
-  end;
+  end; }
 end;
 
-procedure TZMemTableHelper.CopyStru(src: TDataSet; xcFields: TByteSet =[];
+procedure TZMemTableHelper.CopyStru(src: TDataSet; xcFields: array of Integer;
                                               DeleteOldFields: Boolean=True);
-var ii: Integer;
+var ii, cc: Integer; xclude: array of boolean;
 begin
   Close;
   if DeleteOldFields then
     FieldDefs.Clear;
-  for ii := 0 to src.Fieldcount-1 do
-    if not (ii in xcFields) then
+  cc := src.FieldCount;
+  SetLength(xclude, cc); //default value is False for the array
+  for ii in xcFields do
+    if ii < cc then xclude[ii] := True;
+{  for ii :=0 to  High(xcFields) do
+    if xcFields[ii] < cc then
+      xclude[ii] := True;}
+  for ii := 0 to cc-1 do
+    if not xclude[ii] then
       try
         with src.Fields[ii] do
           FieldDefs.Add(FieldName, DataType, Size, Required);
@@ -167,6 +204,11 @@ begin
   Open;
 end;
 
+procedure TZMemTableHelper.CopyStru(src: TDataSet;
+                                              DeleteOldFields: Boolean=True); overload;
+begin
+  CopyStru(src, [], DeleteOldFields)
+end;
 
 procedure TZMemTableHelper.CopyData(src: TDataSet);
 var ii, kk: Integer; map: array of TPoint; fd: TField;
@@ -188,9 +230,15 @@ begin
   while not src.EOF do
     begin
       Append;
-      for ii := 0 to high(map) do
-          Fields[map[ii].x].Value := src.Fields[map[ii].y].Value;
-      Post;
+      try
+        for ii := 0 to high(map) do
+            Fields[map[ii].x].Value := src.Fields[map[ii].y].Value;
+        Post;
+
+      except
+        Cancel;
+        raise;
+      end;
       src.Next
     end;
 end;
@@ -207,7 +255,7 @@ end;
 
 {$IFDEF USE_MY_STREAMIMG_METHOD}
 
-//{$DEFINE STORE_PRECISION_FOR_FLOATFIELD}
+
 procedure TZMemTableHelper.LoadFromStream(AStream: TStream);
 var
   len, a, b, cc, kk: Integer;  tx: string;  req: Boolean;
@@ -287,15 +335,20 @@ begin
       for a := 1 to kk do
         begin
           Append;
-          for b := 0 to FieldCount - 1 do
-            begin
-              case Fields[b].DataType of
-                ftString, ftMemo: Fields[b].AsString :=  ReadStr;
-                ftBlob: try ReadBlob; except end;
-                else  ReadData;
-              end; //case
-            end;
-            Post;
+          try
+            for b := 0 to FieldCount - 1 do
+              begin
+                case Fields[b].DataType of
+                  ftString, ftMemo: Fields[b].AsString :=  ReadStr;
+                  ftBlob: try ReadBlob; except end;
+                  else  ReadData;
+                end; //case
+              end;
+              Post;
+          except
+            Cancel;
+            raise
+          end;
         end;
       {try
         while true do
@@ -412,3 +465,5 @@ begin
 end;
 {$ENDIF}
 end.
+
+end;
