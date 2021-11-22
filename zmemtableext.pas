@@ -112,7 +112,7 @@ begin;
   try
     ms.LoadFromfile(Filename);
 //    ms.Position := 0;
-    zip := ms.ReadByte*256+ms.ReadByte = $789C;
+    zip := (ms.ReadByte = $78) and (ms.ReadByte in [$01, $9C, $DA]);  
     (*7801 - No Compression  789C - Default Compression  78DA - Best Compression *)
     if zip then
       uzStream(ms);
